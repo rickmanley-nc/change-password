@@ -1,0 +1,30 @@
+---
+- hosts: all
+  name: Change existing user {{ account_name }} password
+  tasks:
+  - name: Determine if user exists
+    shell: egrep "^{{ account_name }}:" /etc/passwd
+    ignore_errors: yes
+    register: user_info
+
+  - name: Backup /etc/shadow
+    copy:
+      src: /etc/shadow
+      dest: /etc/shadow.{{ work_order }}
+      remote_src: True
+    when: item.rc == 0
+    with_items: "{{ user_info.results }}"
+
+  - name: Generate the root password hash
+    local_action: command python -c 'import crypt; print crypt.crypt("{{ user_defined_password }}", "$6$3dgaQk0H")'
+    register: pass_hash
+    when: item.rc == 0
+    with_items: "{{ user_info.results }}"
+
+  - name: Update {{ account_name }} password
+    user:
+      name: "{{ account_name }}"
+      update_password: always
+      password: "{{ pass_hash.stdout }}"
+    when: item.rc == 0
+    with_items: "{{ user_info.results }}"
